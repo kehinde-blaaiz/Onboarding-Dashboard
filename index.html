@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blaaiz Sales Tracker</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-business:#2a78d6;
+    --series-platform:#eb6834;
+    --series-blaaizpay:#1baf7a;
+    --series-reactivation:#eda100;
+    --status-good:    #0ca30c;
+    --status-warning: #fab219;
+    --status-serious: #ec835a;
+    --status-critical:#d03b3b;
+    --seq-100: #cde2fb; --seq-200:#9ec5f4; --seq-300:#6da7ec; --seq-400:#3987e5; --seq-500:#256abf; --seq-600:#184f95;
+    --cat-1:#2a78d6; --cat-2:#eb6834; --cat-3:#1baf7a; --cat-4:#eda100; --cat-5:#e87ba4; --cat-6:#008300; --cat-7:#4a3aa7; --cat-8:#e34948;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin:0; background: var(--page); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text-primary); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+  header.top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 12px;}
+  header.top h1 { font-size: 22px; margin: 0; font-weight: 650; }
+  header.top .sub { color: var(--text-secondary); font-size: 13px; }
+
+  .header-badges { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+  .refresh-btn { cursor:pointer; font-family:inherit; }
+  .refresh-btn:hover { background: color-mix(in srgb, var(--text-primary) 4%, var(--surface-1)); }
+  .refresh-btn:disabled { cursor:default; opacity:0.7; }
+  .badge { font-size:12px; padding:6px 12px; border-radius:999px; border:1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .badge.live { background: color-mix(in srgb, var(--status-good) 14%, var(--surface-1)); color: var(--status-good); border-color: transparent; font-weight:600; }
+  .badge .pulse-dot { width:7px; height:7px; border-radius:50%; background: var(--status-good); display:inline-block; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 22px 0 28px; }
+  @media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 560px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+  .kpi-row-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  @media (max-width: 760px) { .kpi-row-4 { grid-template-columns: repeat(2, 1fr); } }
+  .kpi { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .kpi .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+  .kpi .value { font-size: 30px; font-weight: 650; line-height:1; }
+  .kpi .note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; }
+
+  .tabs-row { display:flex; gap:10px; flex-wrap:wrap; margin: 20px 0; }
+  .tab-btn { flex:1; min-width:160px; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-1); cursor:pointer; text-align:left; font-family:inherit; color: var(--text-primary); transition: background 0.12s ease, color 0.12s ease; }
+  .tab-btn:hover { background: color-mix(in srgb, var(--text-primary) 4%, var(--surface-1)); }
+  .tab-btn .tab-title { font-weight:650; font-size:14.5px; }
+  .tab-btn .tab-sub { font-size:12px; margin-top:3px; opacity:0.85; }
+  .tab-btn.active { color:#fff; border-color:transparent; }
+
+  .owners-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:16px; margin-top:6px; }
+  .owner-card { border:1px solid var(--border); border-radius:10px; padding:16px; }
+  .owner-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .owner-avatar { width:36px; height:36px; min-width:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:650; font-size:13px; color:#fff; }
+  .owner-name { font-weight:650; font-size:14px; }
+  .owner-count { font-size:12px; color:var(--text-secondary); }
+  .owner-project { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--grid); }
+  .owner-project:first-of-type { border-top:none; }
+  .owner-project-name { font-size:13px; font-weight:600; }
+  .owner-project-stage { font-size:11.5px; color:var(--text-secondary); display:flex; align-items:center; gap:5px; white-space:nowrap; }
+
+  .stage-distribution { display:grid; grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); align-items:end; gap: 16px; padding: 22px 4px 4px; overflow-x:auto; min-height:160px; }
+  .stage-bar-col { display:flex; flex-direction:column; align-items:center; min-width: 0; }
+  .stage-bar-count { font-weight:650; margin-bottom:8px; font-size:15px; }
+  .stage-bar { width:100%; max-width:64px; border-radius:8px 8px 3px 3px; min-height:4px; }
+  .stage-bar-label { margin-top:10px; font-size:12px; color:var(--text-secondary); text-align:center; line-height:1.3; }
+
+  .stage-cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(128px,1fr)); gap:12px; margin-top:20px; }
+  .stage-card { border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .stage-card .pill { display:inline-block; font-size:11px; font-weight:650; padding:3px 10px; border-radius:999px; margin-bottom:12px; }
+  .stage-card .count { font-size:26px; font-weight:650; }
+  .stage-card .mini-bar { height:5px; border-radius:4px; background:var(--grid); margin:10px 0 8px; overflow:hidden; }
+  .stage-card .mini-bar > div { height:100%; border-radius:4px; }
+  .stage-card .avg { font-size:11.5px; color:var(--text-muted); }
+
+  .panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px; margin-bottom: 20px; }
+  .panel h2 { font-size: 14px; font-weight: 650; margin: 0 0 2px; }
+  .panel .desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  @media (max-width: 980px) { .charts-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) { .charts-grid { grid-template-columns: 1fr; } }
+
+  .bar-row { display:grid; grid-template-columns: 150px 1fr 34px; align-items:center; gap:10px; margin: 10px 0; font-size: 13px; }
+  .bar-row .lbl { color: var(--text-secondary); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar-track { position:relative; height:16px; background: transparent; }
+  .bar-track .grid-line { position:absolute; top:0; bottom:0; width:1px; background: var(--grid); }
+  .bar-fill { position:absolute; top:2px; bottom:2px; left:0; border-radius:4px; min-width: 4px; cursor:pointer; }
+  .bar-row .cnt { font-variant-numeric: tabular-nums; color: var(--text-primary); font-weight:600; }
+
+  .legend { display:flex; gap:16px; margin-bottom: 4px; font-size:12px; color: var(--text-secondary); flex-wrap:wrap;}
+  .legend .item{ display:flex; align-items:center; gap:6px;}
+  .legend .swatch{ width:10px; height:10px; border-radius:2px; display:inline-block;}
+
+  .funnel-stage { margin: 8px 0; }
+  .funnel-bar-wrap { display:flex; align-items:center; gap: 10px; }
+  .funnel-track { flex:1; height: 22px; background: var(--grid); border-radius: 4px; position: relative; overflow:hidden; }
+  .funnel-fill { height:100%; border-radius:4px; }
+  .funnel-label { width: 128px; font-size:12.5px; color:var(--text-secondary); }
+  .funnel-count { width: 30px; text-align:right; font-weight:600; font-variant-numeric: tabular-nums; font-size:13px;}
+
+  .tooltip { position: fixed; pointer-events:none; background: var(--text-primary); color: var(--surface-1); font-size: 12px; padding: 6px 9px; border-radius: 6px; opacity:0; transform: translate(-50%, -125%); transition: opacity 0.08s ease; z-index: 50; white-space:nowrap; }
+  .tooltip.show { opacity: 1; }
+
+  .filters { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  .filters select, .filters input { font-size:13px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background: var(--surface-1); color: var(--text-primary); }
+  .filters input[type="text"] { flex:1; min-width:180px; }
+  .filters input[type="checkbox"] { flex:0 0 auto; min-width:0; width:auto; }
+
+  table { width:100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.02em; color: var(--text-muted); font-weight:600; padding: 8px 10px; border-bottom: 1px solid var(--grid); position: sticky; top:0; background: var(--surface-1); }
+  tbody td { padding: 9px 10px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+  tbody tr:hover { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+  .tag { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; padding: 2px 8px; border-radius: 999px; font-weight:600; }
+  .tag.business { background: color-mix(in srgb, var(--series-business) 16%, var(--surface-1)); color: var(--series-business); }
+  .tag.platform { background: color-mix(in srgb, var(--series-platform) 16%, var(--surface-1)); color: var(--series-platform); }
+  .tag.blaaizpay { background: color-mix(in srgb, var(--series-blaaizpay) 16%, var(--surface-1)); color: var(--series-blaaizpay); }
+  .tag.reactivation { background: color-mix(in srgb, var(--series-reactivation) 20%, var(--surface-1)); color: var(--series-reactivation); }
+  .tag.pipeline { background: color-mix(in srgb, var(--text-muted) 20%, var(--surface-1)); color: var(--text-secondary); }
+  .dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .table-wrap { max-height: 520px; overflow:auto; border: 1px solid var(--border); border-radius: 8px; }
+  .flag { color: var(--status-serious); font-weight:600; }
+  .table-scroll-hint { font-size: 11px; color: var(--text-muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Blaaiz Onboarding Dashboard</h1>
+      <div class="sub"><span id="headerDateText">Tuesday, August 11, 2026</span> &middot; <span id="headerClock"></span></div>
+    </div>
+    <div class="header-badges">
+      <span class="badge" id="lastUpdatedBadge">Last updated: —</span>
+      <span class="badge live"><span class="pulse-dot"></span>Live &middot; Asana &mdash; 1 project</span>
+      <button class="badge refresh-btn" id="refreshBtn" title="Fetch the latest data from Asana right now">&#8635; Refresh</button>
+    </div>
+  </header>
+
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="label">Pipeline deals/leads</div>
+      <div class="value" id="kpiPipeline">24</div>
+      <div class="note">Pre-signup, tracked in PIPELINE DEALS/LEADS</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Active onboarding</div>
+      <div class="value" id="kpiOnboarding">11</div>
+      <div class="note">Signed up, compliance → live in progress</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Live / transacting</div>
+      <div class="value" id="kpiLive">2</div>
+      <div class="note">Onboarding complete this cycle</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Reactivating</div>
+      <div class="value" id="kpiReactivation">3</div>
+      <div class="note">Dormant clients being re-engaged</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Archived</div>
+      <div class="value" id="kpiArchived">2</div>
+      <div class="note">Graduated to transacting or failed onboarding — off the active sheet, kept for history</div>
+    </div>
+  </div>
+
+  <div class="tabs-row" id="tabsRow"></div>
+
+  <div class="panel" id="trackPanel">
+    <div class="kpi-row-4" id="trackKpiRow"></div>
+    <h2 id="stageDistTitle">Stage distribution</h2>
+    <div class="desc" id="stageDistDesc"></div>
+    <div class="stage-distribution" id="stageDistribution"></div>
+    <div class="stage-cards" id="stageCards"></div>
+  </div>
+
+  <div class="panel" id="ownersPanel" style="display:none;">
+    <h2>Project owners</h2>
+    <div class="desc" id="ownersDesc"></div>
+    <div class="owners-grid" id="ownersGrid"></div>
+  </div>
+
+  <div class="panel">
+    <h2>All accounts</h2>
+    <div class="desc">Every company on the sheet — filter by section, track, stage, or sales rep, or search by name/sector.</div>
+    <div class="filters">
+      <input id="searchBox" type="text" placeholder="Search company, sector, needs…">
+      <select id="sectionFilter">
+        <option value="">All sections</option>
+        <option value="Pipeline">Pipeline</option>
+        <option value="Onboarding">Onboarding (B2B)</option>
+      </select>
+      <select id="trackFilter">
+        <option value="">All tracks</option>
+        <option value="Business">Business</option>
+        <option value="Platform">Platform</option>
+        <option value="Blaaizpay">Blaaizpay</option>
+      </select>
+      <select id="amFilter">
+        <option value="">All reps</option>
+      </select>
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-secondary); white-space:nowrap;">
+        <input type="checkbox" id="archivedToggle"> Include archived
+      </label>
+    </div>
+    <div class="table-wrap">
+      <table id="accountsTable">
+        <thead>
+          <tr>
+            <th>Company</th><th>Sector</th><th>Needs</th><th>Section</th><th>Track</th><th>Stage</th><th>Rep (AM)</th><th>TPV (weekly)</th>
+          </tr>
+        </thead>
+        <tbody id="accountsBody"></tbody>
+      </table>
+    </div>
+    <div class="table-scroll-hint" id="accountsHint"></div>
+  </div>
+
+  <div class="panel" style="display:none;">
+    <h2>Setup log <span style="font-weight:400; color:var(--text-muted); font-size:11.5px;">(one-time cleanup, 11 Aug 2026 — not updated by later refreshes)</span></h2>
+    <div class="desc">What was changed when this dashboard was first built from the sheet. Counts and current flags now live in the summary line above the table and the Flags KPI, since those need to stay accurate as the data changes — this log is historical.</div>
+    <ul style="margin:0; padding-left: 18px; font-size:13px; color: var(--text-secondary); line-height:1.7;">
+      <li>Standardized every Status value from this sheet's raw free text (e.g. "Reestablishing relationship," "KYB in review," "conversion," "Viban in progress") onto the same fixed vocabulary as before — Status is still a text field in Asana, so this was a value-by-value rewrite, not a schema change.</li>
+      <li>Deleted a duplicate "Earth and Minerals" row and merged its Needs (Blaaiz Business + OTC) into the remaining one.</li>
+      <li>Moved "Digitech" from Pipeline to the Onboarding section (it was marked "Onboarded" but left in Pipeline) and archived it as Transacting.</li>
+      <li>Reactivation is a flag, not a stage — dormant clients coming back show at their real stage (usually Live) with a "Reactivating" tag, and their Asana Status reads "Live (Reactivating)".</li>
+      <li>Archived clients are marked complete in Asana with a Status ending in "(Archived)" instead of being deleted from the sheet, so churn/conversion history is kept — they're excluded from the live KPIs and track panels, and only show in the table with "Include archived" ticked.</li>
+      <li>Where Status was empty or too generic to place ("Onboarding" with no detail), the stage defaults to Compliance Review (onboarding) or Conversation (pipeline) and the account is flagged in the table and the Flags KPI for a human check — this rule re-applies automatically on every refresh, not just at setup.</li>
+      <li>Where Needs was empty, track defaults to Business and the account is marked with an asterisk in the table — also re-applied automatically each refresh.</li>
+    </ul>
+  </div>
+
+</div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// Live data now comes from a Netlify serverless function (netlify/functions/data.js)
+// which calls the Asana API on every request using a server-side token — nothing here
+// is hardcoded, and no Asana credential is ever shipped to the browser.
+let accounts = [];
+let activeAccounts = [];
+let LAST_UPDATED = new Date();
+
+// Each track's FULL journey — pipeline stages feed straight into onboarding stages,
+// since a deal in, say, the Business track stays in the Business track end to end.
+// This taxonomy is a fixed vocabulary, not sheet data, so it stays defined here.
+const stagesByTrack = {
+  Business:  ["Conversation","Compliance Review","Negotiating","VIBAN Enablement","Live"],
+  Platform:  ["Conversation","Compliance Review","Negotiating","Ops Whitelisting","Integration & Testing","Live"],
+  Blaaizpay: ["Conversation","Compliance Review","Negotiating","Integration & Testing","Live"],
+};
+const trackColorVar = {Business:"--series-business", Platform:"--series-platform", Blaaizpay:"--series-blaaizpay"};
+
+function daysInStage(a){
+  const ms = Date.now() - new Date(a.since + "T00:00:00").getTime();
+  return Math.max(0, Math.floor(ms / 86400000));
+}
+
+let currentTab = "Business";
+
+function renderTabs(){
+  const el = document.getElementById("tabsRow");
+  const trackButtons = Object.keys(stagesByTrack).map(track=>{
+    const count = activeAccounts.filter(a=>a.track===track).length;
+    const colorVar = trackColorVar[track];
+    const isActive = track === currentTab;
+    return `<button class="tab-btn${isActive?' active':''}" data-track="${track}"
+        style="${isActive ? `background:var(${colorVar});` : ''}">
+      <div class="tab-title">${track === "Business" ? "Blaaiz Business" : track === "Platform" ? "Blaaiz Platform" : "Blaaiz Pay"}</div>
+      <div class="tab-sub">${count} customer${count===1?'':'s'} &middot; ${stagesByTrack[track].length} stages</div>
+    </button>`;
+  }).join("");
+  const ownerCount = new Set(activeAccounts.map(a=>a.am || "Unassigned")).size;
+  const isOwnersActive = currentTab === "Owners";
+  const ownersButton = `<button class="tab-btn${isOwnersActive?' active':''}" data-track="Owners"
+      style="${isOwnersActive ? 'background:var(--series-platform);' : ''}">
+    <div class="tab-title">Project Owners</div>
+    <div class="tab-sub">${activeAccounts.length} customer${activeAccounts.length===1?'':'s'} &middot; ${ownerCount} owner${ownerCount===1?'':'s'}</div>
+  </button>`;
+  el.innerHTML = trackButtons + ownersButton;
+  el.querySelectorAll(".tab-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      currentTab = btn.getAttribute("data-track");
+      renderTabs();
+      if (currentTab === "Owners") {
+        document.getElementById("trackPanel").style.display = "none";
+        document.getElementById("ownersPanel").style.display = "";
+        renderOwnersPanel();
+      } else {
+        document.getElementById("ownersPanel").style.display = "none";
+        document.getElementById("trackPanel").style.display = "";
+        renderTrackPanel();
+        const trackFilterEl = document.getElementById("trackFilter");
+        if (trackFilterEl) { trackFilterEl.value = currentTab; applyFilters(); }
+      }
+    });
+  });
+}
+
+function renderOwnersPanel(){
+  const groups = {};
+  activeAccounts.forEach(a=>{
+    const owner = a.am || "Unassigned";
+    (groups[owner] = groups[owner] || []).push(a);
+  });
+  const owners = Object.keys(groups).sort((a,b)=>{
+    if (a === "Unassigned") return 1;
+    if (b === "Unassigned") return -1;
+    return groups[b].length - groups[a].length;
+  });
+  document.getElementById("ownersDesc").textContent = owners.includes("Unassigned") && groups["Unassigned"].length === activeAccounts.length
+    ? "No Asana assignee or AM value is set on this sheet yet, so every account is Unassigned — fill in the AM field in Asana (or tell me who owns what) and this view will group by rep automatically."
+    : "Every active account grouped by its sales rep (AM), pulled from Asana.";
+
+  document.getElementById("ownersGrid").innerHTML = owners.map((owner,i)=>{
+    const list = groups[owner];
+    const initials = owner === "Unassigned" ? "?" : owner.split(" ").map(p=>p[0]).slice(0,2).join("").toUpperCase();
+    const avatarColor = owner === "Unassigned" ? "var(--text-muted)" : `var(--cat-${(i % 8) + 1})`;
+    const projects = list.map(a=>{
+      const colorVar = trackColorVar[a.track] || "--text-muted";
+      return `<div class="owner-project">
+        <div class="owner-project-name">${a.name}</div>
+        <div class="owner-project-stage"><span class="dot" style="background:var(${colorVar});"></span>${a.stage}</div>
+      </div>`;
+    }).join("");
+    return `<div class="owner-card">
+      <div class="owner-header">
+        <div class="owner-avatar" style="background:${avatarColor};">${initials}</div>
+        <div>
+          <div class="owner-name">${owner}</div>
+          <div class="owner-count">${list.length} account${list.length===1?'':'s'}</div>
+        </div>
+      </div>
+      ${projects}
+    </div>`;
+  }).join("");
+}
+
+function renderTrackPanel(){
+  const track = currentTab;
+  const stages = stagesByTrack[track];
+  const colorVar = trackColorVar[track];
+  const list = activeAccounts.filter(a=>a.track===track);
+  const counts = stages.map(s => list.filter(a=>a.stage===s).length);
+  const max = Math.max(...counts, 1);
+
+  // KPIs
+  const firstStage = stages[0];
+  const inFirstStage = list.filter(a=>a.stage===firstStage).length;
+  let furthestIdx = 0;
+  stages.forEach((s,i)=>{ if(counts[i] > 0) furthestIdx = i; });
+  const furthestCandidates = list.filter(a=>a.stage===stages[furthestIdx]).sort((a,b)=>a.name.localeCompare(b.name));
+  const furthest = furthestCandidates[0];
+  const flagged = list.filter(a=>a.flagTrack || a.flagNote).length;
+
+  document.getElementById("trackKpiRow").innerHTML = `
+    <div class="kpi">
+      <div class="label">Customers</div>
+      <div class="value">${list.length}</div>
+      <div class="note">Active in the ${track} track (pipeline + onboarding)</div>
+    </div>
+    <div class="kpi">
+      <div class="label">In ${firstStage}</div>
+      <div class="value">${inFirstStage}</div>
+      <div class="note">Earliest stage of this track's journey</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Furthest along</div>
+      <div class="value" style="font-size:20px;">${furthest ? furthest.name : "—"}</div>
+      <div class="note">${furthest ? furthest.sector + " — " + stages[furthestIdx] : "No active accounts"}</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Flags</div>
+      <div class="value" style="color:${flagged ? 'var(--status-serious)' : 'inherit'}">${flagged}</div>
+      <div class="note">Accounts with a data-quality flag needing a human check</div>
+    </div>
+  `;
+
+  document.getElementById("stageDistTitle").textContent = `Stage distribution — ${track === "Business" ? "Blaaiz Business" : track === "Platform" ? "Blaaiz Platform" : "Blaaiz Pay"}`;
+  document.getElementById("stageDistDesc").textContent = `Full journey for this track, ${firstStage} through Live — one color per stage, not per track, so the shape of the funnel is easy to read at a glance.`;
+
+  document.getElementById("stageDistribution").innerHTML = stages.map((s,i)=>{
+    const height = Math.max((counts[i]/max)*120, counts[i]>0?6:2);
+    const catColor = `var(--cat-${(i % 8) + 1})`;
+    return `<div class="stage-bar-col">
+      <div class="stage-bar-count">${counts[i]}</div>
+      <div class="stage-bar" data-tip="${s}: ${counts[i]} account${counts[i]===1?'':'s'}" style="height:${height}px; background:${catColor};"></div>
+      <div class="stage-bar-label">${s}</div>
+    </div>`;
+  }).join("");
+
+  document.getElementById("stageCards").innerHTML = stages.map((s,i)=>{
+    const inStage = list.filter(a=>a.stage===s);
+    const avgDays = inStage.length ? Math.round(inStage.reduce((sum,a)=>sum+daysInStage(a),0) / inStage.length) : 0;
+    const pct = Math.max((counts[i]/max)*100, counts[i]>0?4:0);
+    const catColor = `var(--cat-${(i % 8) + 1})`;
+    return `<div class="stage-card">
+      <span class="pill" style="background:color-mix(in srgb, ${catColor} 18%, var(--surface-1)); color:${catColor};">${s}</span>
+      <div class="count">${counts[i]}</div>
+      <div class="mini-bar"><div style="width:${pct}%; background:${catColor};"></div></div>
+      <div class="avg">avg ${avgDays}d</div>
+    </div>`;
+  }).join("");
+}
+
+function updateHeaderTimestamps(){
+  document.getElementById("lastUpdatedBadge").textContent = "Last updated: " + LAST_UPDATED.toLocaleString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+
+// Live clock — real current date and time, ticking every second, independent of the
+// Asana data snapshot (that's what "Last updated" reflects instead).
+function updateLiveClock(){
+  const now = new Date();
+  document.getElementById("headerDateText").textContent = now.toLocaleDateString(undefined, {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  document.getElementById("headerClock").textContent = now.toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+updateLiveClock();
+setInterval(updateLiveClock, 1000);
+
+function renderKPIs(){
+  document.getElementById("kpiPipeline").textContent = activeAccounts.filter(a=>a.section==="Pipeline").length;
+  document.getElementById("kpiOnboarding").textContent = activeAccounts.filter(a=> a.section==="Onboarding" && a.stage!=="Live").length;
+  document.getElementById("kpiLive").textContent = activeAccounts.filter(a=>a.stage==="Live").length;
+  document.getElementById("kpiReactivation").textContent = activeAccounts.filter(a=>a.reactivating).length;
+  document.getElementById("kpiArchived").textContent = accounts.filter(a=>a.archived).length;
+}
+
+// Every number here is computed from the live payload — nothing is baked in, so this
+// line stays accurate on every refresh instead of going stale like static prose would.
+function renderAccountsHint(){
+  const archivedCount = accounts.filter(a=>a.archived).length;
+  const assignedCount = activeAccounts.filter(a=>a.am).length;
+  const tpvFilledCount = activeAccounts.filter(a=>a.tpv).length;
+  const flagTrackCount = activeAccounts.filter(a=>a.flagTrack).length;
+  let hint = `${activeAccounts.length} active account${activeAccounts.length===1?'':'s'}`;
+  if (archivedCount) hint += ` (${archivedCount} archived — check "Include archived" to see them)`;
+  hint += `. Rep (AM) is pulled from each task's Asana assignee — `;
+  hint += assignedCount === 0
+    ? `no accounts have one set yet, so this column is blank until reps are assigned.`
+    : `${assignedCount} of ${activeAccounts.length} account${activeAccounts.length===1?'':'s'} currently show${assignedCount===1?'s':''} a rep${assignedCount < activeAccounts.length ? ', the rest are blank until assigned' : ''}.`;
+  hint += ` TPV is filled for ${tpvFilledCount} of ${activeAccounts.length} accounts.`;
+  if (flagTrackCount) hint += ` * = no Needs value recorded, so track was defaulted to Business (${flagTrackCount} account${flagTrackCount===1?'':'s'}) — worth confirming.`;
+  document.getElementById("accountsHint").textContent = hint;
+}
+
+function renderReps(){
+  const reps = [...new Set(accounts.map(a=>a.am).filter(Boolean))].sort();
+  const amFilterEl = document.getElementById("amFilter");
+  const prev = amFilterEl.value;
+  amFilterEl.innerHTML = `<option value="">All reps</option>` + reps.map(r=>`<option value="${r}">${r}</option>`).join("");
+  if (reps.includes(prev)) amFilterEl.value = prev;
+}
+
+function renderAll(){
+  updateHeaderTimestamps();
+  renderTabs();
+  if (currentTab === "Owners") renderOwnersPanel(); else renderTrackPanel();
+  renderKPIs();
+  renderReps();
+  applyFilters();
+  renderAccountsHint();
+}
+
+async function loadData(){
+  const resp = await fetch("/.netlify/functions/data", {cache:"no-store"});
+  if (!resp.ok) throw new Error(`Live data request failed (HTTP ${resp.status})`);
+  const data = await resp.json();
+  if (!Array.isArray(data.accounts)) throw new Error("Unexpected response shape from data function");
+  accounts = data.accounts;
+  activeAccounts = accounts.filter(a=>!a.archived);
+  LAST_UPDATED = data.lastUpdated ? new Date(data.lastUpdated) : new Date();
+}
+
+async function init(){
+  try {
+    await loadData();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    document.getElementById("lastUpdatedBadge").textContent = "Last updated: — (load failed)";
+    document.getElementById("accountsHint").textContent = "Could not load live data from Asana: " + e.message + ". Check that ASANA_TOKEN is set in Netlify's environment variables and try Refresh.";
+  }
+}
+init();
+
+// Table
+function trackTagHTML(track){
+  const map = {Business:"business", Platform:"platform", Blaaizpay:"blaaizpay"};
+  const cls = map[track] || "pipeline";
+  return `<span class="tag ${cls}">${track}</span>`;
+}
+function stageHTML(a){
+  return a.stage + (a.reactivating ? ` <span class="tag reactivation">Reactivating</span>` : "");
+}
+function renderTable(list){
+  document.getElementById("accountsBody").innerHTML = list.map(a=>`
+    <tr${a.archived ? ' style="opacity:0.6;"' : ''}>
+      <td>${a.name}${a.archived ? ` <span class="tag" style="background:var(--status-good); color:#fff;">Archived — ${a.archiveReason}</span>` : ''}${a.flagTrack ? ` <span class="flag" title="No Needs value recorded — track defaulted to Business">*</span>` : ''}</td>
+      <td>${a.sector}</td>
+      <td>${a.needs}</td>
+      <td><span class="tag pipeline">${a.section}</span></td>
+      <td>${trackTagHTML(a.track)}</td>
+      <td>${stageHTML(a)}</td>
+      <td>${a.am || "—"}</td>
+      <td>${a.tpv || "—"}</td>
+    </tr>`).join("");
+}
+function applyFilters(){
+  const q = document.getElementById("searchBox").value.toLowerCase();
+  const section = document.getElementById("sectionFilter").value;
+  const track = document.getElementById("trackFilter").value;
+  const am = document.getElementById("amFilter").value;
+  const includeArchived = document.getElementById("archivedToggle").checked;
+  let list = accounts.filter(a=>{
+    if (a.archived && !includeArchived) return false;
+    const matchesQ = !q || (a.name+a.sector+a.needs+a.stage).toLowerCase().includes(q);
+    const matchesSection = !section || a.section===section;
+    const matchesTrack = !track || a.track===track;
+    const matchesAM = !am || a.am===am;
+    return matchesQ && matchesSection && matchesTrack && matchesAM;
+  });
+  renderTable(list);
+}
+document.getElementById("searchBox").addEventListener("input", applyFilters);
+document.getElementById("sectionFilter").addEventListener("change", applyFilters);
+document.getElementById("trackFilter").addEventListener("change", applyFilters);
+document.getElementById("amFilter").addEventListener("change", applyFilters);
+document.getElementById("archivedToggle").addEventListener("change", applyFilters);
+
+// Tooltip on funnel bars
+const tooltip = document.getElementById("tooltip");
+document.addEventListener("mousemove", e=>{
+  const target = e.target.closest("[data-tip]");
+  if(target){
+    tooltip.textContent = target.getAttribute("data-tip");
+    tooltip.style.left = e.clientX + "px";
+    tooltip.style.top = e.clientY + "px";
+    tooltip.classList.add("show");
+  } else {
+    tooltip.classList.remove("show");
+  }
+});
+
+// Refresh — calls the Netlify function again, which hits Asana live. This is a real
+// refresh now: whatever changed in Asana since page load shows up here immediately.
+document.getElementById("refreshBtn").addEventListener("click", async ()=>{
+  const btn = document.getElementById("refreshBtn");
+  btn.disabled = true;
+  btn.textContent = "↻ Refreshing…";
+  await init();
+  btn.disabled = false;
+  btn.innerHTML = "&#8635; Refresh";
+});
+
+</script>
+</body>
+</html>
