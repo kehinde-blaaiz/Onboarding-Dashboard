@@ -86,7 +86,7 @@
 
   .stage-info-icon { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; border:1.3px solid currentColor; font-size:9.5px; font-weight:700; font-style:normal; margin-left:5px; cursor:pointer; opacity:0.7; vertical-align:middle; user-select:none; }
   .stage-info-icon:hover, .stage-info-icon:focus-visible { opacity:1; }
-  .stage-popover { position:fixed; width:230px; background:var(--surface-1); border:1px solid var(--border); border-radius:8px; padding:10px 26px 10px 12px; font-size:12.5px; color:var(--text-secondary); line-height:1.45; box-shadow:0 6px 20px rgba(0,0,0,0.14); z-index:60; display:none; }
+  .stage-popover { position:fixed; width:230px; background:var(--surface-1, #fcfcfb); border:1px solid var(--border, rgba(11,11,11,0.10)); border-radius:8px; padding:10px 26px 10px 12px; font-size:12.5px; color:var(--text-secondary, #52514e); line-height:1.45; box-shadow:0 6px 20px rgba(0,0,0,0.14); z-index:60; display:none; }
   .stage-popover.show { display:block; }
   .stage-popover .stage-popover-title { font-weight:650; color:var(--text-primary); margin-bottom:4px; font-size:13px; }
   .stage-popover .stage-popover-close { position:absolute; top:5px; right:7px; background:none; border:none; cursor:pointer; font-size:15px; line-height:1; color:var(--text-muted); padding:3px; }
@@ -451,7 +451,10 @@ function ensureStagePopover(){
     el = document.createElement("div");
     el.id = "stagePopover";
     el.className = "stage-popover";
-    document.body.appendChild(el);
+    // Append inside .viz-root, not document.body — the color variables (--surface-1,
+    // --border, etc.) are scoped to .viz-root, so a popover outside it would render
+    // with a transparent background since those variables wouldn't resolve to anything.
+    (document.querySelector(".viz-root") || document.body).appendChild(el);
   }
   return el;
 }
