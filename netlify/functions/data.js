@@ -69,14 +69,16 @@ function inferTrack(needsRaw) {
   return { track: "Business", flagTrack: false };
 }
 
+// Per sales team feedback, negotiation happens within Conversation rather than as its
+// own step — "Negotiating" (and similar language) now maps into Conversation instead
+// of being tracked as a separate stage.
 const STAGE_KEYWORDS = [
   { re: /\blive\b|transact|onboarded|active/i, stage: "Live" },
   { re: /viban.*(enable|progress|setup)|enablement/i, stage: "VIBAN Enablement" },
   { re: /integration|testing/i, stage: "Integration & Testing" },
   { re: /whitelist/i, stage: "Ops Whitelisting" },
-  { re: /negotiat|awaiting invoice|contract|pricing/i, stage: "Negotiating" },
   { re: /kyb|kyc|compliance|review|onboarding/i, stage: "Compliance Review" },
-  { re: /conversion|conversation|lead|prospect|intro/i, stage: "Conversation" },
+  { re: /conversion|conversation|lead|prospect|intro|negotiat|awaiting invoice|contract|pricing/i, stage: "Conversation" },
 ];
 
 function inferStage(statusRaw, section, track) {
@@ -100,15 +102,18 @@ function inferStage(statusRaw, section, track) {
 // Kept as a lookup alongside the dashboard's own stagesByTrack so this file can
 // validate a matched stage actually belongs to the account's track.
 const STAGE_ROUTE = {
-  Business: ["Conversation", "Compliance Review", "Negotiating", "VIBAN Enablement", "Live"],
-  Platform: ["Conversation", "Compliance Review", "Negotiating", "Ops Whitelisting", "Integration & Testing", "Live"],
-  Blaaizpay: ["Conversation", "Compliance Review", "Negotiating", "Integration & Testing", "Live"],
+  Business: ["Conversation", "Compliance Review", "VIBAN Enablement", "Live"],
+  Platform: ["Conversation", "Compliance Review", "Ops Whitelisting", "Integration & Testing", "Live"],
+  Blaaizpay: ["Conversation", "Compliance Review", "Integration & Testing", "Live"],
 };
 
 function inferArchiveReason(statusRaw) {
-  const status = (statusRaw || "");
+  const status = (statusRaw || "").trim();
+  // Older convention wrote "Transacting (Archived)" — strip the suffix if present.
   const match = status.match(/^(.*?)\s*\(Archived\)\s*$/i);
   if (match && match[1].trim()) return match[1].trim();
+  // Newer dropdown option may just read "Transacting" with no suffix — use it as-is.
+  if (status) return status;
   return "Archived";
 }
 
