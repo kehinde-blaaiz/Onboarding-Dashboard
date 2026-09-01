@@ -259,10 +259,12 @@ let LAST_UPDATED = new Date();
 // Each track's FULL journey — pipeline stages feed straight into onboarding stages,
 // since a deal in, say, the Business track stays in the Business track end to end.
 // This taxonomy is a fixed vocabulary, not sheet data, so it stays defined here.
+// Per sales team feedback, negotiation happens within Conversation rather than as its
+// own step, so "Negotiating" was folded into Conversation instead of staying a stage.
 const stagesByTrack = {
-  Business:  ["Conversation","Compliance Review","Negotiating","VIBAN Enablement","Live"],
-  Platform:  ["Conversation","Compliance Review","Negotiating","Ops Whitelisting","Integration & Testing","Live"],
-  Blaaizpay: ["Conversation","Compliance Review","Negotiating","Integration & Testing","Live"],
+  Business:  ["Conversation","Compliance Review","VIBAN Enablement","Live"],
+  Platform:  ["Conversation","Compliance Review","Ops Whitelisting","Integration & Testing","Live"],
+  Blaaizpay: ["Conversation","Compliance Review","Integration & Testing","Live"],
 };
 const trackColorVar = {Business:"--series-business", Platform:"--series-platform", Blaaizpay:"--series-blaaizpay"};
 
@@ -510,7 +512,7 @@ function stageHTML(a){
 function renderTable(list){
   document.getElementById("accountsBody").innerHTML = list.map(a=>`
     <tr${a.archived ? ' style="opacity:0.6;"' : ''}>
-      <td>${a.name}${a.archived ? ` <span class="tag" style="background:var(--status-good); color:#fff;">Archived — ${a.archiveReason}</span>` : ''}${a.flagTrack ? ` <span class="flag" title="No Needs value recorded — track defaulted to Business">*</span>` : ''}</td>
+      <td>${a.name}${a.archived ? ` <span class="tag" style="background:var(--status-good); color:#fff;" title="Archived">${a.archiveReason}</span>` : ''}${a.flagTrack ? ` <span class="flag" title="No Needs value recorded — track defaulted to Business">*</span>` : ''}</td>
       <td>${a.sector}</td>
       <td>${a.needs}</td>
       <td><span class="tag pipeline">${a.section}</span></td>
