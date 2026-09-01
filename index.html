@@ -84,6 +84,14 @@
   .stage-card .mini-bar > div { height:100%; border-radius:4px; }
   .stage-card .avg { font-size:11.5px; color:var(--text-muted); }
 
+  .stage-info-icon { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; border:1.3px solid currentColor; font-size:9.5px; font-weight:700; font-style:normal; margin-left:5px; cursor:pointer; opacity:0.7; vertical-align:middle; user-select:none; }
+  .stage-info-icon:hover, .stage-info-icon:focus-visible { opacity:1; }
+  .stage-popover { position:fixed; width:230px; background:var(--surface-1); border:1px solid var(--border); border-radius:8px; padding:10px 26px 10px 12px; font-size:12.5px; color:var(--text-secondary); line-height:1.45; box-shadow:0 6px 20px rgba(0,0,0,0.14); z-index:60; display:none; }
+  .stage-popover.show { display:block; }
+  .stage-popover .stage-popover-title { font-weight:650; color:var(--text-primary); margin-bottom:4px; font-size:13px; }
+  .stage-popover .stage-popover-close { position:absolute; top:5px; right:7px; background:none; border:none; cursor:pointer; font-size:15px; line-height:1; color:var(--text-muted); padding:3px; }
+  .stage-popover .stage-popover-close:hover { color:var(--text-primary); }
+
   .panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px; margin-bottom: 20px; }
   .panel h2 { font-size: 14px; font-weight: 650; margin: 0 0 2px; }
   .panel .desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
@@ -261,10 +269,13 @@ let LAST_UPDATED = new Date();
 // This taxonomy is a fixed vocabulary, not sheet data, so it stays defined here.
 // Per sales team feedback, negotiation happens within Conversation rather than as its
 // own step, so "Negotiating" was folded into Conversation instead of staying a stage.
+// "Onboarding" is the first step once a deal leaves Pipeline for the relationship-update
+// section — the business is submitting its own details/documents, before Blaaiz reviews
+// them in Compliance Review.
 const stagesByTrack = {
-  Business:  ["Conversation","Compliance Review","VIBAN Enablement","Live"],
-  Platform:  ["Conversation","Compliance Review","Ops Whitelisting","Integration & Testing","Live"],
-  Blaaizpay: ["Conversation","Compliance Review","Integration & Testing","Live"],
+  Business:  ["Conversation","Onboarding","Compliance Review","VIBAN Enablement","Live"],
+  Platform:  ["Conversation","Onboarding","Compliance Review","Ops Whitelisting","Integration & Testing","Live"],
+  Blaaizpay: ["Conversation","Onboarding","Compliance Review","Integration & Testing","Live"],
 };
 const trackColorVar = {Business:"--series-business", Platform:"--series-platform", Blaaizpay:"--series-blaaizpay"};
 
@@ -412,13 +423,86 @@ function renderTrackPanel(){
     const pct = Math.max((counts[i]/max)*100, counts[i]>0?4:0);
     const catColor = `var(--cat-${(i % 8) + 1})`;
     return `<div class="stage-card">
-      <span class="pill" style="background:color-mix(in srgb, ${catColor} 18%, var(--surface-1)); color:${catColor};">${s}</span>
+      <span class="pill" style="background:color-mix(in srgb, ${catColor} 18%, var(--surface-1)); color:${catColor};">${s}<span class="stage-info-icon" data-stage="${s}" tabindex="0" role="button" aria-label="About the ${s} stage">i</span></span>
       <div class="count">${counts[i]}</div>
       <div class="mini-bar"><div style="width:${pct}%; background:${catColor};"></div></div>
       <div class="avg">avg ${avgDays}d</div>
     </div>`;
   }).join("");
 }
+
+// What each stage actually means — shown in the little popover behind the "i" icon.
+const STAGE_DESCRIPTIONS = {
+  "Conversation": "Early contact with the business — outreach, discovery, and agreeing terms, before anything formal is submitted.",
+  "Onboarding": "The business is submitting its own details and documents (KYB/KYC info, paperwork) — before Blaaiz has reviewed anything.",
+  "Compliance Review": "Blaaiz is reviewing what the business submitted — compliance and KYB/KYC checks on the details provided.",
+  "VIBAN Enablement": "Setting up virtual account numbers (VIBANs) for the business ahead of going live.",
+  "Ops Whitelisting": "Operations is whitelisting the account on internal systems ahead of integration.",
+  "Integration & Testing": "Technical integration and testing of the platform/API connection before launch.",
+  "Live": "Fully onboarded and transacting — the account is active.",
+};
+
+// Stage info popover: hovering the "i" icon previews the description; clicking it pins
+// the popover open with a close button so it stays put on touch devices too.
+let stagePopoverPinned = false;
+function ensureStagePopover(){
+  let el = document.getElementById("stagePopover");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "stagePopover";
+    el.className = "stage-popover";
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function showStagePopover(stage, iconEl, pinned){
+  const pop = ensureStagePopover();
+  const desc = STAGE_DESCRIPTIONS[stage] || "No description recorded for this stage yet.";
+  pop.innerHTML = `<div class="stage-popover-title">${stage}</div><div>${desc}</div>` +
+    (pinned ? `<button type="button" class="stage-popover-close" aria-label="Close">&times;</button>` : "");
+  pop.classList.add("show");
+  const rect = iconEl.getBoundingClientRect();
+  const popWidth = 230;
+  let left = rect.left + rect.width / 2 - popWidth / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - popWidth - 8));
+  let top = rect.bottom + 8;
+  pop.style.left = left + "px";
+  pop.style.top = top + "px";
+  // Flip above the icon if it would otherwise run off the bottom of the viewport.
+  const popHeight = pop.getBoundingClientRect().height;
+  if (top + popHeight > window.innerHeight - 8) {
+    pop.style.top = Math.max(8, rect.top - popHeight - 8) + "px";
+  }
+  if (pinned) stagePopoverPinned = true;
+}
+function hideStagePopover(){
+  const pop = document.getElementById("stagePopover");
+  if (pop) pop.classList.remove("show");
+  stagePopoverPinned = false;
+}
+document.addEventListener("mouseover", e=>{
+  const icon = e.target.closest(".stage-info-icon");
+  if (icon && !stagePopoverPinned) showStagePopover(icon.getAttribute("data-stage"), icon, false);
+});
+document.addEventListener("mouseout", e=>{
+  const icon = e.target.closest(".stage-info-icon");
+  if (icon && !stagePopoverPinned) hideStagePopover();
+});
+document.addEventListener("click", e=>{
+  const closeBtn = e.target.closest(".stage-popover-close");
+  if (closeBtn) { hideStagePopover(); return; }
+  const icon = e.target.closest(".stage-info-icon");
+  if (icon) { e.stopPropagation(); showStagePopover(icon.getAttribute("data-stage"), icon, true); return; }
+  const pop = document.getElementById("stagePopover");
+  if (stagePopoverPinned && pop && !pop.contains(e.target)) hideStagePopover();
+});
+document.addEventListener("keydown", e=>{
+  if (e.key === "Enter" || e.key === " ") {
+    const icon = e.target.closest && e.target.closest(".stage-info-icon");
+    if (icon) { e.preventDefault(); showStagePopover(icon.getAttribute("data-stage"), icon, true); }
+  }
+  if (e.key === "Escape") hideStagePopover();
+});
 
 function updateHeaderTimestamps(){
   document.getElementById("lastUpdatedBadge").textContent = "Last updated: " + LAST_UPDATED.toLocaleString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
