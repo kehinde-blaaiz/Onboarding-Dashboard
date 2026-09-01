@@ -7,14 +7,18 @@
 //
 // Required environment variable (set in Netlify → Site configuration → Environment variables):
 //   ASANA_TOKEN            Personal access token or Service Account token with read access
-//                           to the "Duplicate of Sales Relationship update" project.
+//                           to the "Sales Relationship update" project.
 //
-// Optional overrides (defaults point at the current sheet):
-//   ASANA_PROJECT_GID      default 1217359825300808
-//   ASANA_STATE_TASK_GID   default 1217362985782724  ([SYSTEM] Stage Tracking State task)
+// Optional overrides (defaults point at the real production sheet):
+//   ASANA_PROJECT_GID      default 1213660624168097 (the real "Sales Relationship update" sheet — READ ONLY, never written to)
+//   ASANA_STATE_TASK_GID   default 1217362985782724  ([SYSTEM] Stage Tracking State task — lives in the old
+//                          test/duplicate project on purpose. The real sheet must never have anything added to
+//                          it, so the "days in stage" tracking state is kept in the separate test project
+//                          instead. This function only ever READS the real project; it reads AND writes this
+//                          one task elsewhere. Do not delete that test project/task without migrating this.)
 
 const ASANA_API = "https://app.asana.com/api/1.0";
-const DEFAULT_PROJECT_GID = "1217359825300808";
+const DEFAULT_PROJECT_GID = "1213660624168097";
 const DEFAULT_STATE_TASK_GID = "1217362985782724";
 const FALLBACK_SINCE = "2026-08-11"; // day tracking began; used only if a task is missing from state
 
@@ -26,6 +30,13 @@ const FIELD_NAMES = {
   revenue: "Revenue (Weekly)",
   am: "AM",
 };
+
+// The real sheet has TWO custom fields both literally named "Status" — a messy free-text
+// legacy field and a clean Single-select (dropdown) field. Matching by name alone would
+// silently grab whichever one the Asana API happens to list first (the messy one), so the
+// clean dropdown field is looked up by its specific gid instead. Falls back to name-based
+// lookup for any project that only has one "Status" field.
+const STATUS_FIELD_GID = "1218039107944702";
 
 async function asanaGet(path, token) {
   const res = await fetch(`${ASANA_API}${path}`, {
@@ -45,9 +56,32 @@ function customFieldValue(task, fieldName) {
   return cf.display_value || "";
 }
 
+function customFieldValueByGid(task, gid) {
+  const cf = (task.custom_fields || []).find(f => f.gid === gid);
+  if (!cf) return "";
+  return cf.display_value || "";
+}
+
+function statusValue(task) {
+  // Prefer the specific enum field by gid (handles the duplicate-name case); fall back
+  // to name-based lookup for any project that only has one field called "Status".
+  return customFieldValueByGid(task, STATUS_FIELD_GID) || customFieldValue(task, FIELD_NAMES.status);
+}
+
 function sectionName(task) {
   const membership = (task.memberships || [])[0];
   return membership?.section?.name || "";
+}
+
+// Only these two sections represent real accounts. Anything else (a notes/issues section
+// like "Challenges And Concerns", a leftover "Untitled section" holding [SYSTEM] tasks,
+// etc.) is excluded entirely rather than being defaulted into one of the two — those rows
+// aren't accounts and shouldn't show up on the dashboard at all.
+function sectionCategory(task) {
+  const name = sectionName(task).toUpperCase();
+  if (name.includes("PIPELINE")) return "Pipeline";
+  if (name.includes("RELATIONSHIP")) return "Onboarding";
+  return null;
 }
 
 // --- Classification rules -------------------------------------------------
@@ -72,29 +106,48 @@ function inferTrack(needsRaw) {
 // Per sales team feedback, negotiation happens within Conversation rather than as its
 // own step — "Negotiating" (and similar language) now maps into Conversation instead
 // of being tracked as a separate stage.
+// "Onboarding" is its own stage now (the business submitting details/documents), distinct
+// from "Compliance Review" (Blaaiz reviewing what was submitted) — these used to be
+// merged under one Compliance Review keyword match; they're split out below so order
+// matters here: Onboarding is checked before Compliance Review's narrower keywords.
 const STAGE_KEYWORDS = [
   { re: /\blive\b|transact|onboarded|active/i, stage: "Live" },
   { re: /viban.*(enable|progress|setup)|enablement/i, stage: "VIBAN Enablement" },
   { re: /integration|testing/i, stage: "Integration & Testing" },
   { re: /whitelist/i, stage: "Ops Whitelisting" },
-  { re: /kyb|kyc|compliance|review|onboarding/i, stage: "Compliance Review" },
+  { re: /kyb|kyc|compliance|review/i, stage: "Compliance Review" },
+  { re: /\bonboarding\b/i, stage: "Onboarding" },
   { re: /conversion|conversation|lead|prospect|intro|negotiat|awaiting invoice|contract|pricing/i, stage: "Conversation" },
 ];
 
 function inferStage(statusRaw, section, track) {
   const status = (statusRaw || "").trim();
   const stages = STAGE_ROUTE[track] || STAGE_ROUTE.Business;
+  const fallbackStage = section === "Pipeline" ? "Conversation" : "Onboarding";
   if (!status) {
-    return { stage: section === "Pipeline" ? "Conversation" : "Compliance Review", flagNote: "No Status value recorded on this task — stage defaulted, worth a real look." };
+    // Onboarding (not Compliance Review) is the entry stage for the relationship-update
+    // section now — an untouched task there hasn't submitted anything yet.
+    return { stage: fallbackStage, flagNote: "No Status value recorded on this task — stage defaulted, worth a real look." };
   }
   for (const { re, stage } of STAGE_KEYWORDS) {
     if (re.test(status) && stages.includes(stage)) {
       return { stage, flagNote: null };
     }
   }
-  // Nothing matched a known keyword — default by section, and flag it.
+  // It may have matched a real stage keyword that just isn't valid for THIS track (e.g.
+  // Status says "Integration & Testing" but Needs implies Business, which has no such
+  // stage) — that's a more specific, more actionable flag than "no match at all".
+  for (const { re, stage } of STAGE_KEYWORDS) {
+    if (re.test(status)) {
+      return {
+        stage: fallbackStage,
+        flagNote: `Status "${status}" maps to "${stage}", which isn't part of the ${track} track's journey — worth checking whether the track (from Needs) or the Status is the one that's off.`,
+      };
+    }
+  }
+  // Nothing matched a known keyword at all — default by section, and flag it.
   return {
-    stage: section === "Pipeline" ? "Conversation" : "Compliance Review",
+    stage: fallbackStage,
     flagNote: `Status "${status}" didn't match a known stage keyword — defaulted, worth a real look.`,
   };
 }
@@ -102,9 +155,9 @@ function inferStage(statusRaw, section, track) {
 // Kept as a lookup alongside the dashboard's own stagesByTrack so this file can
 // validate a matched stage actually belongs to the account's track.
 const STAGE_ROUTE = {
-  Business: ["Conversation", "Compliance Review", "VIBAN Enablement", "Live"],
-  Platform: ["Conversation", "Compliance Review", "Ops Whitelisting", "Integration & Testing", "Live"],
-  Blaaizpay: ["Conversation", "Compliance Review", "Integration & Testing", "Live"],
+  Business: ["Conversation", "Onboarding", "Compliance Review", "VIBAN Enablement", "Live"],
+  Platform: ["Conversation", "Onboarding", "Compliance Review", "Ops Whitelisting", "Integration & Testing", "Live"],
+  Blaaizpay: ["Conversation", "Onboarding", "Compliance Review", "Integration & Testing", "Live"],
 };
 
 function inferArchiveReason(statusRaw) {
@@ -145,7 +198,7 @@ exports.handler = async () => {
       asanaGet(
         `/projects/${projectGid}/tasks?opt_fields=` +
           encodeURIComponent(
-            "name,completed,assignee.name,memberships.section.name,custom_fields.name,custom_fields.display_value"
+            "name,completed,assignee.name,memberships.section.name,custom_fields.gid,custom_fields.name,custom_fields.display_value"
           ),
         token
       ),
@@ -157,10 +210,12 @@ exports.handler = async () => {
     const accounts = tasks
       .filter(t => !t.name.startsWith("[SYSTEM]"))
       .map(task => {
-        const section = sectionName(task).toUpperCase().includes("PIPELINE") ? "Pipeline" : "Onboarding";
+        const section = sectionCategory(task);
+        if (!section) return null; // not a real account row (notes/issues section, stray section, etc.)
+
         const sector = customFieldValue(task, FIELD_NAMES.sector) || "—";
         const needsRaw = customFieldValue(task, FIELD_NAMES.needs);
-        const statusRaw = customFieldValue(task, FIELD_NAMES.status);
+        const statusRaw = statusValue(task);
         const tpv = customFieldValue(task, FIELD_NAMES.tpv) || customFieldValue(task, FIELD_NAMES.revenue) || "";
         const amField = customFieldValue(task, FIELD_NAMES.am);
         const am = task.assignee?.name || amField || "";
@@ -190,7 +245,8 @@ exports.handler = async () => {
         if (flagTrack) account.flagTrack = true;
         if (flagNote) account.flagNote = flagNote;
         return account;
-      });
+      })
+      .filter(Boolean);
 
     return {
       statusCode: 200,
