@@ -16,6 +16,14 @@
 //                          it, so the "days in stage" tracking state is kept in the separate test project
 //                          instead. This function only ever READS the real project; it reads AND writes this
 //                          one task elsewhere. Do not delete that test project/task without migrating this.)
+//
+// The state task's notes also carry two onboarding-duration fields per account, maintained
+// by the same hourly job (never written here — this function only reads them):
+//   onboardingSince   the date the account left "Conversation" and entered the onboarding
+//                      funnel — set once, never reset by later stage moves. Absent for
+//                      accounts still in Conversation (onboarding hasn't started yet).
+//   completedAt       the date the account first reached "Live" — set once, frozen after
+//                      that. Absent while still in progress.
 
 const ASANA_API = "https://app.asana.com/api/1.0";
 const DEFAULT_PROJECT_GID = "1213660624168097";
@@ -225,6 +233,12 @@ exports.handler = async () => {
         const reactivating = /reactivat|reestablish/i.test(statusRaw);
         const { stage, flagNote } = inferStage(statusRaw, section, track);
         const since = stateMap[task.gid]?.since || FALLBACK_SINCE;
+        // onboardingSince: the one fixed date this account left Conversation and started
+        // onboarding — set once by the hourly job and never reset by later stage moves.
+        // completedAt: the date it first reached Live — also fixed once set. Both are
+        // absent for accounts still in Conversation (they haven't started onboarding yet).
+        const onboardingSince = stateMap[task.gid]?.onboardingSince || null;
+        const completedAt = stateMap[task.gid]?.completedAt || null;
 
         const account = {
           name: task.name,
@@ -236,6 +250,8 @@ exports.handler = async () => {
           am,
           tpv,
           since,
+          onboardingSince,
+          completedAt,
         };
         if (reactivating) account.reactivating = true;
         if (archived) {
