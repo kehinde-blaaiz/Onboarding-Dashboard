@@ -42,8 +42,8 @@
   .badge.live { background: color-mix(in srgb, var(--status-good) 14%, var(--surface-1)); color: var(--status-good); border-color: transparent; font-weight:600; }
   .badge .pulse-dot { width:7px; height:7px; border-radius:50%; background: var(--status-good); display:inline-block; }
 
-  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 22px 0 28px; }
-  @media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
+  .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin: 22px 0 28px; }
+  @media (max-width: 1100px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 560px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
   .kpi-row-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
   @media (max-width: 760px) { .kpi-row-4 { grid-template-columns: repeat(2, 1fr); } }
@@ -184,6 +184,11 @@
       <div class="value" id="kpiArchived">2</div>
       <div class="note">Graduated to transacting or failed onboarding — off the active sheet, kept for history</div>
     </div>
+    <div class="kpi">
+      <div class="label">Avg time to first transaction</div>
+      <div class="value" id="kpiAvgOnboarding">—</div>
+      <div class="note">From entering Onboarding to going Live/Transacting, across accounts that have reached it</div>
+    </div>
   </div>
 
   <div class="tabs-row" id="tabsRow"></div>
@@ -229,7 +234,7 @@
       <table id="accountsTable">
         <thead>
           <tr>
-            <th>Company</th><th>Sector</th><th>Needs</th><th>Section</th><th>Track</th><th>Stage</th><th>Rep (AM)</th><th>TPV (weekly)</th>
+            <th>Company</th><th>Sector</th><th>Needs</th><th>Section</th><th>Track</th><th>Stage</th><th title="Days from entering Onboarding to first transaction (Live) — or days so far, if not there yet">Onboarding → First Txn</th><th>Rep (AM)</th><th>TPV (weekly)</th>
           </tr>
         </thead>
         <tbody id="accountsBody"></tbody>
@@ -282,6 +287,37 @@ const trackColorVar = {Business:"--series-business", Platform:"--series-platform
 function daysInStage(a){
   const ms = Date.now() - new Date(a.since + "T00:00:00").getTime();
   return Math.max(0, Math.floor(ms / 86400000));
+}
+
+// Onboarding duration — how long it's taken (or is taking) this account to go from
+// starting onboarding to its first transaction, measured from the day it left
+// Conversation (a.onboardingSince) to the day it first reached Live/Transacting
+// (a.completedAt — "Live" is this sheet's proxy for "first transaction", since Asana
+// doesn't carry an actual transaction timestamp). Not to be confused with
+// daysInStage/a.since, which track time in the CURRENT stage only.
+// Returns null if the account hasn't started onboarding yet (still in Conversation).
+function onboardingDays(a){
+  if (!a.onboardingSince) return null;
+  const start = new Date(a.onboardingSince + "T00:00:00").getTime();
+  const end = a.completedAt ? new Date(a.completedAt + "T00:00:00").getTime() : Date.now();
+  return Math.max(0, Math.floor((end - start) / 86400000));
+}
+function onboardingDurationHTML(a){
+  const d = onboardingDays(a);
+  if (d == null) return `<span style="color:var(--text-muted);">—</span>`;
+  return a.completedAt
+    ? `${d}d <span style="color:var(--text-muted); font-size:11.5px;">(to first txn)</span>`
+    : `${d}d <span style="color:var(--text-muted); font-size:11.5px;">so far</span>`;
+}
+// Average, across accounts that have actually reached their first transaction
+// (completedAt set), of days from onboardingSince to completedAt. Archived/current
+// status doesn't matter here — this is a historical "how long did it take" number,
+// not a live-state one.
+function avgOnboardingDays(list){
+  const done = list.filter(a => a.onboardingSince && a.completedAt);
+  if (!done.length) return null;
+  const total = done.reduce((sum, a) => sum + onboardingDays(a), 0);
+  return Math.round(total / done.length);
 }
 
 let currentTab = "Business";
@@ -527,6 +563,8 @@ function renderKPIs(){
   document.getElementById("kpiLive").textContent = activeAccounts.filter(a=>a.stage==="Live").length;
   document.getElementById("kpiReactivation").textContent = activeAccounts.filter(a=>a.reactivating).length;
   document.getElementById("kpiArchived").textContent = accounts.filter(a=>a.archived).length;
+  const avgOnboard = avgOnboardingDays(accounts);
+  document.getElementById("kpiAvgOnboarding").textContent = avgOnboard == null ? "—" : avgOnboard + "d";
 }
 
 // Every number here is computed from the live payload — nothing is baked in, so this
@@ -605,6 +643,7 @@ function renderTable(list){
       <td><span class="tag pipeline">${a.section}</span></td>
       <td>${trackTagHTML(a.track)}</td>
       <td>${stageHTML(a)}</td>
+      <td>${onboardingDurationHTML(a)}</td>
       <td>${a.am || "—"}</td>
       <td>${a.tpv || "—"}</td>
     </tr>`).join("");
