@@ -59,6 +59,20 @@ account has sat in its current stage (Asana's free-text Status field has no buil
 change history). Do not delete that old test project or this task without first
 moving the tracking state somewhere else — it's the one piece of infrastructure this
 whole pipeline still depends on outside the real project.
+
+Onboarding → first-transaction duration
+
+Per account, the state task's notes now also carry `onboardingSince` (the date it left
+Conversation and started onboarding, set once and never reset by later stage moves) and
+`completedAt` (the date it first reached Live/Transacting — this sheet's stand-in for
+"first transaction," since Asana doesn't carry an actual transaction timestamp). Both are
+maintained by the same hourly scheduled task that keeps `since` current; `data.js` only
+reads them. The dashboard uses them to show, per account, days from onboarding start to
+first transaction (or days so far if it hasn't gotten there yet), plus an "Avg time to
+first transaction" KPI across accounts that have. Older state entries that predate this
+field pair are backfilled once, approximating `onboardingSince`/`completedAt` from the
+existing `since` date — exact to the day going forward, approximate for history before
+this feature existed.
 The real sheet has two fields both named "Status"
 There's a legacy free-text "Status" field and a clean Single-select "Status" dropdown
 — both attached to the project, both literally named "Status". `data.js` reads the
